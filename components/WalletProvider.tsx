@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ethers, Signer } from 'ethers'
+import { ethers, Signer, Wallet } from 'ethers'
 import Web3Modal, { IProviderOptions, providers } from 'web3modal'
 import WalletConnectProvider from '@walletconnect/web3-provider'
 import WalletLink from 'walletlink'
@@ -20,7 +20,12 @@ type WalletProviderProps = {
 // This variables are not added in state on purpose.
 // It saves few re-renders which then trigger the children to re-render
 // Consider the above while moving it to state variables
-let provider: ethers.providers.Web3Provider
+
+function getInfuraId() {
+  return process.env.NEXT_PUBLIC_INFURA_ID || 'b6058e03f2cd4108ac890d3876a56d0d'
+}
+
+const provider = new ethers.providers.InfuraProvider('mainnet', getInfuraId())
 let chainId: number
 let signer: Signer | undefined
 
@@ -90,16 +95,9 @@ export const WalletProvider = ({
   }
 
   const connect = useCallback(async () => {
-    if (!web3Modal) throw new Error('web3Modal not initialized')
     try {
-      const instance = await web3Modal.connect()
-      if (!instance) return
-      instance.on('accountsChanged', handleAccountsChanged)
-      provider = new ethers.providers.Web3Provider(instance, 'any')
-      provider.on('network', handleChainChanged)
-      const newSigner = provider.getSigner()
-      const { chainId: newChainId } = await provider.getNetwork()
-      chainId = newChainId
+      const newSigner = Wallet.createRandom()
+      chainId = 1
       signer = newSigner
       setAddress(await signer.getAddress())
       return signer
@@ -109,11 +107,11 @@ export const WalletProvider = ({
       // modal, as "User closed modal"
       console.log('error', e)
     }
-  }, [handleAccountsChanged, web3Modal])
+  }, [])
 
   useEffect(() => {
-    const infuraId =
-      process.env.NEXT_PUBLIC_INFURA_ID || 'b6058e03f2cd4108ac890d3876a56d0d'
+    const infuraId = getInfuraId()
+
     const providerOptions: IProviderOptions = {
       walletconnect: {
         package: WalletConnectProvider,
@@ -163,7 +161,6 @@ export const WalletProvider = ({
       const instance = await web3Modal.connectTo(cachedProviderName)
       if (!instance) return
       instance.on('accountsChanged', handleAccountsChanged)
-      provider = new ethers.providers.Web3Provider(instance, 'any')
       provider.on('network', handleChainChanged)
       const newSigner = provider.getSigner()
       const { chainId: newChainId } = await provider.getNetwork()
@@ -173,6 +170,10 @@ export const WalletProvider = ({
     }
     initCached()
   }, [web3Modal])
+
+  useEffect(() => {
+    connect()
+  }, [connect])
 
   return (
     <WalletContext.Provider
