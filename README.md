@@ -1,4 +1,4 @@
-# XMTP Demo Chat
+# React Chat Example
 
 ![Test](https://github.com/xmtp/example-chat-react/actions/workflows/test.yml/badge.svg)
 ![Lint](https://github.com/xmtp/example-chat-react/actions/workflows/lint.yml/badge.svg)
