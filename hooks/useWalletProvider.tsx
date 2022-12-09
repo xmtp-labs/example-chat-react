@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ethers } from 'ethers'
+import { ethers, Wallet } from 'ethers'
 import Web3Modal, { IProviderOptions, providers } from 'web3modal'
 import WalletConnectProvider from '@walletconnect/web3-provider'
 import WalletLink from 'walletlink'
@@ -13,56 +13,65 @@ const cachedLookupAddress = new Map<string, string | undefined>()
 const cachedResolveName = new Map<string, string | undefined>()
 const cachedGetAvatarUrl = new Map<string, string | undefined>()
 
-// This variables are not added in state on purpose.
-// It saves few re-renders which then trigger the children to re-render
-// Consider the above while moving it to state variables
-let provider: ethers.providers.Web3Provider
+function getInfuraId() {
+  return process.env.NEXT_PUBLIC_INFURA_ID || 'c518355f44bd45709cf0d42567d7bdb4'
+}
 
 const useWalletProvider = () => {
+  const [provider, setProvider] = useState<ethers.providers.InfuraProvider>()
   const [web3Modal, setWeb3Modal] = useState<Web3Modal>()
+  const address = useAppStore((state) => state.address)
   const setAddress = useAppStore((state) => state.setAddress)
   const setSigner = useAppStore((state) => state.setSigner)
   const reset = useAppStore((state) => state.reset)
   const router = useRouter()
 
-  const resolveName = useCallback(async (name: string) => {
-    if (cachedResolveName.has(name)) {
-      return cachedResolveName.get(name)
-    }
+  const resolveName = useCallback(
+    async (name: string) => {
+      if (cachedResolveName.has(name)) {
+        return cachedResolveName.get(name)
+      }
+      const { chainId } = (await provider?.getNetwork()) || {}
 
-    const { chainId } = (await provider?.getNetwork()) || {}
+      if (Number(chainId) !== ETH_CHAIN_ID) {
+        return undefined
+      }
+      const address = (await provider?.resolveName(name)) || undefined
+      cachedResolveName.set(name, address)
+      return address
+    },
+    [provider]
+  )
 
-    if (Number(chainId) !== ETH_CHAIN_ID) {
-      return undefined
-    }
-    const address = (await provider?.resolveName(name)) || undefined
-    cachedResolveName.set(name, address)
-    return address
-  }, [])
+  const lookupAddress = useCallback(
+    async (address: string) => {
+      if (cachedLookupAddress.has(address)) {
+        return cachedLookupAddress.get(address)
+      }
+      const { chainId } = (await provider?.getNetwork()) || {}
 
-  const lookupAddress = useCallback(async (address: string) => {
-    if (cachedLookupAddress.has(address)) {
-      return cachedLookupAddress.get(address)
-    }
-    const { chainId } = (await provider?.getNetwork()) || {}
+      if (Number(chainId) !== ETH_CHAIN_ID) {
+        return undefined
+      }
 
-    if (Number(chainId) !== ETH_CHAIN_ID) {
-      return undefined
-    }
+      const name = (await provider?.lookupAddress(address)) || undefined
+      cachedLookupAddress.set(address, name)
+      return name
+    },
+    [provider]
+  )
 
-    const name = (await provider?.lookupAddress(address)) || undefined
-    cachedLookupAddress.set(address, name)
-    return name
-  }, [])
-
-  const getAvatarUrl = useCallback(async (name: string) => {
-    if (cachedGetAvatarUrl.has(name)) {
-      return cachedGetAvatarUrl.get(name)
-    }
-    const avatarUrl = (await provider?.getAvatar(name)) || undefined
-    cachedGetAvatarUrl.set(name, avatarUrl)
-    return avatarUrl
-  }, [])
+  const getAvatarUrl = useCallback(
+    async (name: string) => {
+      if (cachedGetAvatarUrl.has(name)) {
+        return cachedGetAvatarUrl.get(name)
+      }
+      const avatarUrl = (await provider?.getAvatar(name)) || undefined
+      cachedGetAvatarUrl.set(name, avatarUrl)
+      return avatarUrl
+    },
+    [provider]
+  )
 
   // Note, this triggers a re-render on acccount change and on diconnect.
   const disconnect = useCallback(() => {
@@ -80,31 +89,23 @@ const useWalletProvider = () => {
   }, [disconnect])
 
   const connect = useCallback(async () => {
-    if (!web3Modal) {
-      throw new Error('web3Modal not initialized')
-    }
     try {
-      const instance = await web3Modal.connect()
-      if (!instance) {
-        return
+      if (!address) {
+        const newSigner = Wallet.createRandom()
+        setSigner(newSigner)
+        setAddress(newSigner.address)
+        return newSigner
       }
-      instance.on('accountsChanged', handleAccountsChanged)
-      provider = new ethers.providers.Web3Provider(instance, 'any')
-      const newSigner = provider.getSigner()
-      setSigner(newSigner)
-      setAddress(await newSigner.getAddress())
-      return newSigner
     } catch (e) {
       // TODO: better error handling/surfacing here.
       // Note that web3Modal.connect throws an error when the user closes the
       // modal, as "User closed modal"
       console.log('error', e)
     }
-  }, [handleAccountsChanged, web3Modal])
+  }, [])
 
   useEffect(() => {
-    const infuraId =
-      process.env.NEXT_PUBLIC_INFURA_ID || 'b6058e03f2cd4108ac890d3876a56d0d'
+    const infuraId = getInfuraId()
     const providerOptions: IProviderOptions = {
       walletconnect: {
         package: WalletConnectProvider,
@@ -161,16 +162,22 @@ const useWalletProvider = () => {
           return
         }
         instance.on('accountsChanged', handleAccountsChanged)
-        provider = new ethers.providers.Web3Provider(instance, 'any')
-        const newSigner = provider.getSigner()
+        const newSigner = provider?.getSigner()
         setSigner(newSigner)
-        setAddress(await newSigner.getAddress())
+        setAddress(await newSigner?.getAddress())
       } catch (e) {
         console.error(e)
       }
     }
     initCached()
   }, [web3Modal])
+
+  useEffect(() => {
+    if (!provider) {
+      setProvider(new ethers.providers.InfuraProvider('mainnet', getInfuraId()))
+      connect()
+    }
+  }, [provider])
 
   return {
     resolveName,

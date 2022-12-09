@@ -19,6 +19,8 @@ const RecipientControl = (): JSX.Element => {
   const client = useAppStore((state) => state.client)
   const router = useRouter()
   const recipientWalletAddress = getAddressFromPath(router)
+  const conversations = useAppStore((state) => state.conversations)
+  const setConversations = useAppStore((state) => state.setConversations)
   const [recipientInputMode, setRecipientInputMode] = useState(
     RecipientInputMode.InvalidEntry
   )
@@ -32,6 +34,11 @@ const RecipientControl = (): JSX.Element => {
   )
 
   const onSubmit = async (address: string) => {
+    const conversation = await client?.conversations.newConversation(address)
+    if (conversation) {
+      conversations.set(address, conversation)
+      setConversations(new Map(conversations))
+    }
     router.push(address ? `/dm/${address}` : '/dm/')
   }
 
