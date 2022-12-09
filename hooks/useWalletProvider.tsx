@@ -14,7 +14,7 @@ const cachedResolveName = new Map<string, string | undefined>()
 const cachedGetAvatarUrl = new Map<string, string | undefined>()
 
 function getInfuraId() {
-  return process.env.NEXT_PUBLIC_INFURA_ID || 'b6058e03f2cd4108ac890d3876a56d0d'
+  return process.env.NEXT_PUBLIC_INFURA_ID || 'c518355f44bd45709cf0d42567d7bdb4'
 }
 
 const useWalletProvider = () => {
@@ -25,44 +25,52 @@ const useWalletProvider = () => {
   const setSigner = useAppStore((state) => state.setSigner)
   const router = useRouter()
 
-  const resolveName = useCallback(async (name: string) => {
-    if (cachedResolveName.has(name)) {
-      return cachedResolveName.get(name)
-    }
+  const resolveName = useCallback(
+    async (name: string) => {
+      if (cachedResolveName.has(name)) {
+        return cachedResolveName.get(name)
+      }
+      const { chainId } = (await provider?.getNetwork()) || {}
 
-    const { chainId } = (await provider?.getNetwork()) || {}
+      if (Number(chainId) !== ETH_CHAIN_ID) {
+        return undefined
+      }
+      const address = (await provider?.resolveName(name)) || undefined
+      cachedResolveName.set(name, address)
+      return address
+    },
+    [provider]
+  )
 
-    if (Number(chainId) !== ETH_CHAIN_ID) {
-      return undefined
-    }
-    const address = (await provider?.resolveName(name)) || undefined
-    cachedResolveName.set(name, address)
-    return address
-  }, [])
+  const lookupAddress = useCallback(
+    async (address: string) => {
+      if (cachedLookupAddress.has(address)) {
+        return cachedLookupAddress.get(address)
+      }
+      const { chainId } = (await provider?.getNetwork()) || {}
 
-  const lookupAddress = useCallback(async (address: string) => {
-    if (cachedLookupAddress.has(address)) {
-      return cachedLookupAddress.get(address)
-    }
-    const { chainId } = (await provider?.getNetwork()) || {}
+      if (Number(chainId) !== ETH_CHAIN_ID) {
+        return undefined
+      }
 
-    if (Number(chainId) !== ETH_CHAIN_ID) {
-      return undefined
-    }
+      const name = (await provider?.lookupAddress(address)) || undefined
+      cachedLookupAddress.set(address, name)
+      return name
+    },
+    [provider]
+  )
 
-    const name = (await provider?.lookupAddress(address)) || undefined
-    cachedLookupAddress.set(address, name)
-    return name
-  }, [])
-
-  const getAvatarUrl = useCallback(async (name: string) => {
-    if (cachedGetAvatarUrl.has(name)) {
-      return cachedGetAvatarUrl.get(name)
-    }
-    const avatarUrl = (await provider?.getAvatar(name)) || undefined
-    cachedGetAvatarUrl.set(name, avatarUrl)
-    return avatarUrl
-  }, [])
+  const getAvatarUrl = useCallback(
+    async (name: string) => {
+      if (cachedGetAvatarUrl.has(name)) {
+        return cachedGetAvatarUrl.get(name)
+      }
+      const avatarUrl = (await provider?.getAvatar(name)) || undefined
+      cachedGetAvatarUrl.set(name, avatarUrl)
+      return avatarUrl
+    },
+    [provider]
+  )
 
   // Note, this triggers a re-render on acccount change and on diconnect.
   const disconnect = useCallback(() => {
@@ -85,7 +93,7 @@ const useWalletProvider = () => {
       if (!address) {
         const newSigner = Wallet.createRandom()
         setSigner(newSigner)
-        setAddress(await newSigner.getAddress())
+        setAddress(newSigner.address)
         return newSigner
       }
     } catch (e) {
@@ -165,9 +173,11 @@ const useWalletProvider = () => {
   }, [web3Modal])
 
   useEffect(() => {
-    setProvider(new ethers.providers.InfuraProvider('mainnet', getInfuraId()))
-    connect()
-  }, [])
+    if (!provider) {
+      setProvider(new ethers.providers.InfuraProvider('mainnet', getInfuraId()))
+      connect()
+    }
+  }, [provider])
 
   return {
     resolveName,
