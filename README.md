@@ -18,6 +18,8 @@ For even more examples of apps built with XMTP, see:
 
 You can still fork this repo and existing forks continue to work.
 
+---
+
 **Example chat application demonstrating the core concepts and capabilities of the XMTP client SDK**
 
 This application is built with React, [Next.js](https://nextjs.org/), and the [`xmtp-js` client SDK](https://github.com/xmtp/xmtp-js).
